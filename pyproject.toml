@@ -1,0 +1,27 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "neo4j-prefiltering-mcp"
+version = "0.1.0"
+description = "MCP server that discovers Neo4j vector indexes and exposes them as semantic search tools with automatic metadata pre-filtering."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = [
+    "fastmcp",
+    "neo4j",
+    "langchain",
+]
+
+[project.optional-dependencies]
+openai = ["langchain-openai"]
+cohere = ["langchain-cohere"]
+huggingface = ["langchain-huggingface"]
+
+[project.scripts]
+neo4j-prefiltering-mcp = "neo4j_prefiltering_mcp:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/neo4j_prefiltering_mcp"]
