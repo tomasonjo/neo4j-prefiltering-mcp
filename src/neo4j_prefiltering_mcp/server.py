@@ -43,32 +43,56 @@ def _detect_type(val: Any) -> str:
         return "int"
     if isinstance(val, float):
         return "float"
-    if isinstance(val, (Date, DateTime, date, datetime)):
+    if isinstance(val, (DateTime, datetime)):
+        return "datetime"
+    if isinstance(val, (Date, date)):
         return "date"
     return "string"
 
 
+def _sample_property(
+    driver, label: str, prop: str
+) -> tuple[str, Any]:
+    """Return (type, sample_value) for a single property."""
+    cypher = (
+        f"MATCH (n:`{label}`) WHERE n.`{prop}` IS NOT NULL "
+        f"WITH n LIMIT 1 RETURN n.`{prop}` AS val"
+    )
+    result, _, _ = driver.execute_query(cypher, database_=NEO4J_DATABASE)
+    if not result:
+        return "string", None
+    val = result[0]["val"]
+    return _detect_type(val), val
+
+
 def _sample_property_types(
     driver, label: str, properties: list[str]
-) -> tuple[str | None, dict[str, str]]:
+) -> tuple[str | None, dict[str, str], dict[str, Any]]:
     embedding_prop: str | None = None
     meta_types: dict[str, str] = {}
+    meta_examples: dict[str, Any] = {}
 
     for p in properties:
-        cypher = (
-            f"MATCH (n:`{label}`) WHERE n.`{p}` IS NOT NULL "
-            f"WITH n LIMIT 1 RETURN n.`{p}` AS val"
-        )
-        result, _, _ = driver.execute_query(cypher, database_=NEO4J_DATABASE)
-        if not result:
-            continue
-        t = _detect_type(result[0]["val"])
+        t, sample = _sample_property(driver, label, p)
         if t == "vector":
             embedding_prop = p
         else:
             meta_types[p] = t
+            meta_examples[p] = sample
 
-    return embedding_prop, meta_types
+    return embedding_prop, meta_types, meta_examples
+
+
+def _format_example(val: Any, t: str) -> str:
+    """Format a sample value for the docstring."""
+    if val is None:
+        return "N/A"
+    if t == "string":
+        s = str(val)
+        if len(s) > 50:
+            s = s[:47] + "..."
+        return repr(s)
+    return str(val)
 
 
 def _build_where(
@@ -93,7 +117,7 @@ def _build_where(
                     k = f"filt_{safe}_max"
                     clauses.append(f"n.`{prop}` <= ${k}")
                     params[k] = val["max"]
-        elif t == "date":
+        elif t == "datetime":
             if isinstance(val, dict):
                 if val.get("min") is not None:
                     k = f"filt_{safe}_min"
@@ -102,6 +126,16 @@ def _build_where(
                 if val.get("max") is not None:
                     k = f"filt_{safe}_max"
                     clauses.append(f"n.`{prop}` <= datetime(${k})")
+                    params[k] = val["max"]
+        elif t == "date":
+            if isinstance(val, dict):
+                if val.get("min") is not None:
+                    k = f"filt_{safe}_min"
+                    clauses.append(f"n.`{prop}` >= date(${k})")
+                    params[k] = val["min"]
+                if val.get("max") is not None:
+                    k = f"filt_{safe}_max"
+                    clauses.append(f"n.`{prop}` <= date(${k})")
                     params[k] = val["max"]
         elif t == "bool":
             k = f"filt_{safe}"
@@ -147,7 +181,7 @@ def _build_server() -> FastMCP:
     index_meta: list[dict[str, Any]] = []
     for r in records:
         label = r["labelsOrTypes"][0]
-        embed_prop, prop_types = _sample_property_types(
+        embed_prop, prop_types, prop_examples = _sample_property_types(
             driver, label, r["properties"]
         )
         meta = {
@@ -155,6 +189,7 @@ def _build_server() -> FastMCP:
             "label": label,
             "embed_prop": embed_prop,
             "prop_types": prop_types,
+            "prop_examples": prop_examples,
             "options": r["options"],
         }
         index_meta.append(meta)
@@ -180,23 +215,33 @@ def _build_server() -> FastMCP:
         label = idx["label"]
         embed_prop = idx["embed_prop"]
         prop_types = idx["prop_types"]
+        prop_examples = idx["prop_examples"]
 
         # Build the filter-parameter docstring dynamically
         filter_lines = []
         for prop, t in prop_types.items():
             safe = prop.replace(" ", "_").replace("-", "_")
+            ex = _format_example(prop_examples.get(prop), t)
             if t in ("float", "int"):
                 filter_lines.append(
-                    f"  {safe}: Optional dict with 'min' and/or 'max' (numeric range)"
+                    f"  {safe}: Optional dict with 'min' and/or 'max' (numeric range). Example value: {ex}"
+                )
+            elif t == "datetime":
+                filter_lines.append(
+                    f"  {safe}: Optional dict with 'min' and/or 'max' (ISO datetime strings, uses datetime()). Example value: {ex}"
                 )
             elif t == "date":
                 filter_lines.append(
-                    f"  {safe}: Optional dict with 'min' and/or 'max' (ISO date strings)"
+                    f"  {safe}: Optional dict with 'min' and/or 'max' (ISO date strings, uses date()). Example value: {ex}"
                 )
             elif t == "bool":
-                filter_lines.append(f"  {safe}: Optional bool")
+                filter_lines.append(
+                    f"  {safe}: Optional bool. Example value: {ex}"
+                )
             else:
-                filter_lines.append(f"  {safe}: Optional str (exact match)")
+                filter_lines.append(
+                    f"  {safe}: Optional str (exact match). Example value: {ex}"
+                )
 
         filters_doc = "\n".join(filter_lines) if filter_lines else "  (none)"
 
