@@ -97,11 +97,11 @@ def _build_where(
             if isinstance(val, dict):
                 if val.get("min") is not None:
                     k = f"filt_{safe}_min"
-                    clauses.append(f"n.`{prop}` >= date(${k})")
+                    clauses.append(f"n.`{prop}` >= datetime(${k})")
                     params[k] = val["min"]
                 if val.get("max") is not None:
                     k = f"filt_{safe}_max"
-                    clauses.append(f"n.`{prop}` <= date(${k})")
+                    clauses.append(f"n.`{prop}` <= datetime(${k})")
                     params[k] = val["max"]
         elif t == "bool":
             k = f"filt_{safe}"
