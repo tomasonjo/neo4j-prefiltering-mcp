@@ -187,7 +187,6 @@ def _build_server() -> FastMCP:
             "embed_prop": embed_prop,
             "prop_types": prop_types,
             "prop_examples": prop_examples,
-            "options": r["options"],
         }
         index_meta.append(meta)
         print(
