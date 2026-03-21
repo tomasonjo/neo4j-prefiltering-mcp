@@ -161,10 +161,7 @@ def _build_server() -> FastMCP:
 
     records, _, _ = driver.execute_query(
         """
-        SHOW INDEXES
-        YIELD name, type, labelsOrTypes, properties, options
-        WHERE type = 'VECTOR'
-        RETURN name, labelsOrTypes, properties, options
+        SHOW VECTOR INDEXES
         """,
         database_=NEO4J_DATABASE,
     )
