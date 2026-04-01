@@ -55,10 +55,12 @@ def _sample_property(
 ) -> tuple[str, Any]:
     """Return (type, sample_value) for a single property."""
     cypher = (
-        f"MATCH (n:`{label}`) WHERE n.`{prop}` IS NOT NULL "
-        f"WITH n LIMIT 1 RETURN n.`{prop}` AS val"
+        "MATCH (n:$($label)) WHERE n[$prop] IS NOT NULL "
+        "WITH n LIMIT 1 RETURN n[$prop] AS val"
     )
-    result, _, _ = driver.execute_query(cypher, database_=NEO4J_DATABASE)
+    result, _, _ = driver.execute_query(
+        cypher, label=label, prop=prop, database_=NEO4J_DATABASE
+    )
     if not result:
         return "string", None
     val = result[0]["val"]
@@ -252,7 +254,7 @@ def _build_server() -> FastMCP:
 
             cypher = (
                 f"CYPHER 25\n"
-                f"MATCH (n:`{label}`)\n"
+                f"MATCH (n:$($label))\n"
                 f"  SEARCH n IN (\n"
                 f"    VECTOR INDEX {index_name}\n"
                 f"    FOR $query_vec{where_part}\n"
