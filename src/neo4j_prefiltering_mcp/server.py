@@ -266,6 +266,7 @@ def _build_server() -> FastMCP:
 
             cypher_params["query_vec"] = query_vec
             cypher_params["top_k"] = top_k
+            cypher_params["label"] = label
 
             rows, _, _ = driver.execute_query(
                 cypher, cypher_params, database_=NEO4J_DATABASE
